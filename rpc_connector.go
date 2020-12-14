@@ -26,7 +26,7 @@ func (this *RpcConnector) connect() error {
 	if err != nil {
 		return err
 	}
-	this.conn = NewConnection(c)
+	this.conn = NewConnection(c, nil)
 	this.conn.start()
 	return nil
 }

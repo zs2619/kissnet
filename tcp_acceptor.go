@@ -15,7 +15,7 @@ type TcpAcceptor struct {
 	running  int32
 }
 
-func NewTcpAcceptor(port int, cb ClientCB) (*TcpAcceptor, error) {
+func NewTcpAcceptor(port int, cb ConnectionCB) (*TcpAcceptor, error) {
 	ep := fmt.Sprintf("0.0.0.0:%d", port)
 	tcpAddr, err := net.ResolveTCPAddr("tcp", ep)
 	if err != nil {
@@ -25,9 +25,9 @@ func NewTcpAcceptor(port int, cb ClientCB) (*TcpAcceptor, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &TcpAcceptor{Addr: tcpAddr, listener: ln, Acceptor: Acceptor{ClientCB: cb}}, nil
-
+	return &TcpAcceptor{Addr: tcpAddr, listener: ln, Acceptor: Acceptor{CallBack: CallBack{ConnectionCB: cb}}}, nil
 }
+
 func (this *TcpAcceptor) Run() error {
 	go this.accept()
 	return nil
@@ -43,7 +43,7 @@ func (this *TcpAcceptor) accept() {
 			}).Warn("TcpAcceptor::accept error")
 			return
 		}
-		conn := NewConnection(tcpConn)
+		conn := NewConnection(tcpConn, &this.Acceptor.CallBack)
 		go conn.start()
 	}
 }

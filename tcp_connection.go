@@ -6,21 +6,29 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
+
+	"github.com/sirupsen/logrus"
 )
 
 const MsgHeaderMaxSize = 2
 
 type Connection struct {
-	id       int64
-	conn     *net.TCPConn
-	exitSync sync.WaitGroup
-	sendCh   chan *bytes.Buffer
+	id           int64
+	conn         *net.TCPConn
+	exitSync     sync.WaitGroup
+	cb           *CallBack
+	isClose      int32
+	sendCh       chan *bytes.Buffer
+	lastPingTime int64
 }
 
-func NewConnection(conn *net.TCPConn) IConnection {
+func NewConnection(conn *net.TCPConn, cb *CallBack) IConnection {
 	c := &Connection{
-		conn:   conn,
-		sendCh: make(chan *bytes.Buffer, 1024),
+		conn:    conn,
+		isClose: 0,
+		cb:      cb,
+		sendCh:  make(chan *bytes.Buffer, 1024),
 	}
 	return c
 }
@@ -31,7 +39,22 @@ func (this *Connection) getID() int64 {
 func (this *Connection) setID(id int64) {
 	this.id = id
 }
+
+func (this *Connection) IsClose() bool { return atomic.LoadInt32(&this.isClose) > 0 }
+
 func (this *Connection) Close() {
+	this.cb.ConnectionCB(this, nil)
+	this.SendMsg(nil)
+
+	this.exitSync.Wait()
+	atomic.StoreInt32(&this.isClose, 1)
+
+	close(this.sendCh)
+	if this.conn != nil {
+		this.conn.Close()
+		this.conn = nil
+	}
+	logrus.WithFields(logrus.Fields{"id:": this.id}).Info("WsConnection  Close")
 }
 
 func (this *Connection) start() {
@@ -47,6 +70,11 @@ func (this *Connection) start() {
 }
 
 func (this *Connection) SendMsg(msg *bytes.Buffer) error {
+	if this.IsClose() {
+		//关闭不能发送消息
+		return nil
+	}
+	//推入发送循环
 	this.sendCh <- msg
 	return nil
 }
@@ -70,7 +98,6 @@ func (this *Connection) sendMsgLoop() {
 		}
 	}
 	//关闭socket 从读操作退出
-	this.shutDown()
 	this.exitSync.Done()
 }
 
@@ -95,12 +122,6 @@ func (this *Connection) recvMsgLoop() {
 		}
 	}
 	this.exitSync.Done()
-}
-
-func (this *Connection) shutDown() {
-	// 关闭连接
-	if this.conn != nil {
-		this.conn.Close()
-		this.conn = nil
-	}
+	// 退出处理
+	this.Close()
 }

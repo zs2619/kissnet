@@ -18,7 +18,7 @@ type WsConnection struct {
 	conn         *websocket.Conn
 	isClose      int32
 	sendCh       chan *bytes.Buffer
-	cb           *CallBack
+	acceptor     *WSAcceptor
 	exitSync     sync.WaitGroup
 	lastPingTime int64
 }
@@ -34,12 +34,12 @@ func (this *WsConnection) setID(id int64) {
 	this.id = id
 }
 
-func newWSConnection(conn *websocket.Conn, cb *CallBack) IConnection {
+func newWSConnection(conn *websocket.Conn, acceptor *WSAcceptor) IConnection {
 	c := &WsConnection{
-		conn:    conn,
-		isClose: 0,
-		sendCh:  make(chan *bytes.Buffer, 2048),
-		cb:      cb,
+		conn:     conn,
+		isClose:  0,
+		sendCh:   make(chan *bytes.Buffer, 2048),
+		acceptor: acceptor,
 	}
 	c.conn.SetPingHandler(
 		func(message string) error {
@@ -58,7 +58,7 @@ func newWSConnection(conn *websocket.Conn, cb *CallBack) IConnection {
 func (this *WsConnection) IsClose() bool { return atomic.LoadInt32(&this.isClose) > 0 }
 
 func (this *WsConnection) Close() {
-	this.cb.ConnectionCB(this, nil)
+	this.acceptor.ClientCB(this, nil)
 
 	this.SendMsg(nil)
 
@@ -126,7 +126,7 @@ func (this *WsConnection) recvMsgLoop() {
 			break
 		}
 		if mt == websocket.BinaryMessage {
-			err := this.cb.ConnectionCB(this, msg)
+			err := this.acceptor.ClientCB(this, msg)
 			if err != nil {
 				logrus.Error(err)
 				break

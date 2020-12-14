@@ -25,11 +25,11 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func NewWSAcceptor(port int, cb ClientCB) (*WSAcceptor, error) {
+func NewWSAcceptor(port int, cb ConnectionCB) (*WSAcceptor, error) {
 	addrStr := fmt.Sprintf(":%d", port)
 
 	server := &http.Server{Addr: addrStr}
-	return &WSAcceptor{addr: addrStr, server: server, Acceptor: Acceptor{ClientCB: cb}}, nil
+	return &WSAcceptor{addr: addrStr, server: server, Acceptor: Acceptor{CallBack: CallBack{ConnectionCB: cb}}}, nil
 }
 
 func (this *WSAcceptor) Run() error {
@@ -46,7 +46,7 @@ func (this *WSAcceptor) Run() error {
 			}).Fatal("WSAcceptor::Run::Upgrade error")
 			return
 		}
-		ws := newWSConnection(c, this)
+		ws := newWSConnection(c, &this.Acceptor.CallBack)
 		go ws.start()
 	})
 	this.server.Handler = mux

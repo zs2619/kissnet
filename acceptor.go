@@ -10,14 +10,12 @@ type IAcceptor interface {
 	IsRunning() bool
 }
 
-type ClientCB func(IConnection, []byte) error
-
 type Acceptor struct {
-	CMgr     ConnectionMgr
-	ClientCB ClientCB
+	CMgr ConnectionMgr
+	CallBack
 }
 
-func AcceptorFactory(acceptorType string, port int, cb ClientCB) (IAcceptor, error) {
+func AcceptorFactory(acceptorType string, port int, cb ConnectionCB) (IAcceptor, error) {
 	if acceptorType == "ws" {
 		return NewWSAcceptor(port, cb)
 	} else if acceptorType == "tcp" {
