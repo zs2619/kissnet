@@ -54,7 +54,7 @@ func (this *Connection) Close() {
 		this.conn.Close()
 		this.conn = nil
 	}
-	logrus.WithFields(logrus.Fields{"id:": this.id}).Info("WsConnection  Close")
+	logrus.WithFields(logrus.Fields{"id:": this.id}).Info("TcpConnection  Close")
 }
 
 func (this *Connection) start() {
@@ -80,6 +80,11 @@ func (this *Connection) SendMsg(msg *bytes.Buffer) error {
 }
 
 func (this *Connection) sendMsgLoop() {
+	defer func() {
+		if err := recover(); err != nil {
+			this.exitSync.Done()
+		}
+	}()
 	for msg := range this.sendCh {
 		if msg == nil || this.conn == nil {
 			break
@@ -102,6 +107,14 @@ func (this *Connection) sendMsgLoop() {
 }
 
 func (this *Connection) recvMsgLoop() {
+	defer func() {
+		if err := recover(); err != nil {
+			this.exitSync.Done()
+			// 退出处理
+			this.Close()
+			//TODO:打印堆栈
+		}
+	}()
 	var err error
 	var msgLen int
 	msgHeader := make([]byte, MsgHeaderMaxSize)
@@ -120,8 +133,6 @@ func (this *Connection) recvMsgLoop() {
 		if err != nil {
 			break
 		}
+		this.cb.ConnectionCB(this, msgBody)
 	}
-	this.exitSync.Done()
-	// 退出处理
-	this.Close()
 }

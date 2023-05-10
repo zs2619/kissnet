@@ -12,7 +12,7 @@ func testCB(kissnet.IConnection, []byte) error {
 func main() {
 	event := kissnet.NewNetEvent()
 	gAcceptor, err := kissnet.AcceptorFactory(
-		"ws",
+		"tcp",
 		2619,
 		testCB,
 	)
