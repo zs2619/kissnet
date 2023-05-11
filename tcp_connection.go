@@ -83,6 +83,8 @@ func (this *Connection) sendMsgLoop() {
 	defer func() {
 		if err := recover(); err != nil {
 			this.exitSync.Done()
+			//打印堆栈
+			logrus.Error(string(Stack5()))
 		}
 	}()
 	for msg := range this.sendCh {
@@ -112,7 +114,8 @@ func (this *Connection) recvMsgLoop() {
 			this.exitSync.Done()
 			// 退出处理
 			this.Close()
-			//TODO:打印堆栈
+			//打印堆栈
+			logrus.Error(string(Stack5()))
 		}
 	}()
 	var err error
