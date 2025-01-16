@@ -11,7 +11,10 @@
 	// Note that some extensions may not work in Alpine Linux. See https://aka.ms/vscode-remote/linux.
 	"extensions": [
 		"golang.go",
-	]
+	],
+	"remoteEnv": {
+		"GOPROXY": "https://goproxy.io,direct"
+	},
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// "forwardPorts": [],
 	// Use 'postCreateCommand' to run commands after the container is created.

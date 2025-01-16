@@ -28,31 +28,30 @@ func NewTcpAcceptor(port int, cb ConnectionCB) (*TcpAcceptor, error) {
 	return &TcpAcceptor{Addr: tcpAddr, listener: ln, Acceptor: Acceptor{CallBack: CallBack{ConnectionCB: cb}}}, nil
 }
 
-func (this *TcpAcceptor) Run() error {
-	go this.accept()
+func (acceptor *TcpAcceptor) Run() error {
+	acceptor.accept()
 	return nil
 }
 
-func (this *TcpAcceptor) accept() {
-	atomic.StoreInt32(&this.running, 1)
+func (acceptor *TcpAcceptor) accept() {
+	atomic.StoreInt32(&acceptor.running, 1)
 	for {
-		tcpConn, err := this.listener.AcceptTCP()
+		tcpConn, err := acceptor.listener.AcceptTCP()
 		if err != nil {
-			logrus.WithFields(logrus.Fields{
-				"error": err,
-			}).Warn("TcpAcceptor::accept error")
+			logrus.WithError(err).WithFields(logrus.Fields{}).Error("TcpAcceptor::accept error")
 			return
 		}
-		conn := NewConnection(tcpConn, &this.Acceptor.CallBack)
+		conn := NewConnection(tcpConn, &acceptor.Acceptor.CallBack)
 		go conn.start()
 	}
 }
 
-func (this *TcpAcceptor) Close() error {
-	this.listener.Close()
+func (acceptor *TcpAcceptor) Close() error {
+	acceptor.listener.Close()
+	atomic.StoreInt32(&acceptor.running, 0)
 	return nil
 }
 
-func (this *TcpAcceptor) IsRunning() bool {
-	return atomic.LoadInt32(&this.running) > 0
+func (acceptor *TcpAcceptor) IsRunning() bool {
+	return atomic.LoadInt32(&acceptor.running) > 0
 }

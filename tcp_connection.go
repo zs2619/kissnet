@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -33,96 +34,99 @@ func NewConnection(conn *net.TCPConn, cb *CallBack) IConnection {
 	return c
 }
 
-func (this *Connection) getID() int64 {
-	return this.id
+func (c *Connection) getID() int64 {
+	return c.id
 }
-func (this *Connection) setID(id int64) {
-	this.id = id
+func (c *Connection) setID(id int64) {
+	c.id = id
 }
 
-func (this *Connection) IsClose() bool { return atomic.LoadInt32(&this.isClose) > 0 }
+func (c *Connection) IsClose() bool { return atomic.LoadInt32(&c.isClose) > 0 }
 
-func (this *Connection) Close() {
-	this.cb.ConnectionCB(this, nil)
-	this.SendMsg(nil)
+func (c *Connection) Close() {
+	c.cb.ConnectionCB(c, nil)
+	c.SendMsg(nil)
 
-	this.exitSync.Wait()
-	atomic.StoreInt32(&this.isClose, 1)
+	c.exitSync.Wait()
+	atomic.StoreInt32(&c.isClose, 1)
 
-	close(this.sendCh)
-	if this.conn != nil {
-		this.conn.Close()
-		this.conn = nil
+	close(c.sendCh)
+	if c.conn != nil {
+		c.conn.Close()
+		c.conn = nil
 	}
-	logrus.WithFields(logrus.Fields{"id:": this.id}).Info("TcpConnection  Close")
+	logrus.WithFields(logrus.Fields{"id:": c.id}).Info("TcpConnection  Close")
 }
 
-func (this *Connection) start() {
-	this.conn.SetNoDelay(true)
-	this.conn.SetKeepAlive(true)
+func (c *Connection) start() {
+	c.conn.SetNoDelay(true)
+	c.conn.SetKeepAlive(true)
 
 	//同步退出 goroutine
-	this.exitSync.Add(2)
+	c.exitSync.Add(2)
 
 	//开启读写 goroutine
-	go this.recvMsgLoop()
-	go this.sendMsgLoop()
+	go c.recvMsgLoop()
+	go c.sendMsgLoop()
 }
 
-func (this *Connection) SendMsg(msg *bytes.Buffer) error {
-	if this.IsClose() {
+func (c *Connection) SendMsg(msg *bytes.Buffer) error {
+	if c.IsClose() {
 		//关闭不能发送消息
 		return nil
 	}
 	//推入发送循环
-	this.sendCh <- msg
+	c.sendCh <- msg
 	return nil
 }
 
-func (this *Connection) sendMsgLoop() {
+func (c *Connection) sendMsgLoop() {
 	defer func() {
 		if err := recover(); err != nil {
-			this.exitSync.Done()
-			//打印堆栈
-			logrus.Error(string(Stack5()))
+			c.exitSync.Done()
+			if e, ok := err.(error); ok {
+				logrus.WithError(errors.WithStack(e)).Error("sendMsgLoop error")
+			}
 		}
 	}()
-	for msg := range this.sendCh {
-		if msg == nil || this.conn == nil {
+	for msg := range c.sendCh {
+		if msg == nil || c.conn == nil {
 			break
 		}
 
 		msgLen := uint16(msg.Len())
 		buf := make([]byte, MsgHeaderMaxSize)
 		binary.LittleEndian.PutUint16(buf, msgLen)
-		_, err := this.conn.Write(buf)
+		_, err := c.conn.Write(buf)
 		if err != nil {
 			break
 		}
-		_, err = this.conn.Write(msg.Bytes())
+		_, err = c.conn.Write(msg.Bytes())
 		if err != nil {
 			break
 		}
 	}
 	//关闭socket 从读操作退出
-	this.exitSync.Done()
+	c.exitSync.Done()
 }
 
-func (this *Connection) recvMsgLoop() {
+func (c *Connection) recvMsgLoop() {
 	defer func() {
 		if err := recover(); err != nil {
-			this.exitSync.Done()
+			c.exitSync.Done()
 			// 退出处理
-			this.Close()
+			c.Close()
 			//打印堆栈
-			logrus.Error(string(Stack5()))
+			if e, ok := err.(error); ok {
+				logrus.WithError(errors.WithStack(e)).Error("recvMsgLoop error")
+			}
 		}
 	}()
 	var err error
 	var msgLen int
 	msgHeader := make([]byte, MsgHeaderMaxSize)
 	for {
-		_, err = io.ReadFull(this.conn, msgHeader)
+		_, err = io.ReadFull(c.conn, msgHeader)
 		if err != nil {
 			break
 		}
@@ -132,10 +136,10 @@ func (this *Connection) recvMsgLoop() {
 		}
 
 		msgBody := make([]byte, msgLen)
-		_, err = io.ReadFull(this.conn, msgBody)
+		_, err = io.ReadFull(c.conn, msgBody)
 		if err != nil {
 			break
 		}
-		this.cb.ConnectionCB(this, msgBody)
+		c.cb.ConnectionCB(c, msgBody)
 	}
 }
